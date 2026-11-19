@@ -1,5 +1,6 @@
 cryptography
 Pillow
+plyer==2.1.0; sys_platform == 'win32'   # Windows pop-up notifications
 qrcode        # draws the Google Authenticator QR code at first login (without it you type the key instead)
 # --- OPTIONAL: offline translation fallback (big download, ~1 GB with PyTorch). Not needed for normal use:
 # argostranslate

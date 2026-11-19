@@ -12,6 +12,7 @@ for %%F in (chat.key server.crt) do if not exist %%F (
 python -m pip install -r requirements.txt pyinstaller || goto :error
 python -m PyInstaller --noconfirm --clean --windowed --name ChatClient ^
   --collect-submodules qrcode ^
+  --collect-submodules plyer ^
   --add-data "chat.key;." ^
   --add-data "server.crt;." ^
   --add-data "icon.png;." ^

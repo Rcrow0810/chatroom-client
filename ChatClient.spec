@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = []
+if sys.platform == 'win32':
+    hiddenimports += collect_submodules('plyer')       # Windows pop-up notifications
 hiddenimports += collect_submodules('qrcode')       # Google Authenticator QR code (loads its image classes by name)
 
 

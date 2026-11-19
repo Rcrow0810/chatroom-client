@@ -47,6 +47,7 @@ except ImportError:
 
 import crypto_utils
 import account_api
+import notifier
 import games
 import protocol as proto
 import popup_kit
@@ -1675,6 +1676,25 @@ class GameWindow(tk.Toplevel):
 
 
 class SettingsDialog(tk.Toplevel):
+    def _build_alerts_tab(self, frame):
+        prefs = self.owner.notify_prefs
+        tk.Label(frame, text="When the app is open but you're in another window",
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(16, 6))
+        self._alert_vars = {}
+        for key, label in (("toast", "Pop-up notification in the corner of the screen"),
+                           ("preview", "Show the message text in the pop-up"),
+                           ("flash", "Flash the taskbar button"),
+                           ("sound", "Play a sound")):
+            var = tk.BooleanVar(value=prefs.get(key))
+            self._alert_vars[key] = var
+            ttk.Checkbutton(frame, text=label, variable=var,
+                            command=lambda k=key, v=var: prefs.set(k, v.get())).pack(anchor="w", padx=18, pady=3)
+        tk.Label(frame, justify="left", font=("Segoe UI", 8), fg="#888888", text=(
+            "Alerts are for private messages, @mentions, game invites and payment requests.\n"
+            "Nothing pops up while your status is Do Not Disturb.\n"
+            "The window title always shows a count like (2) until you come back.")
+        ).pack(anchor="w", padx=18, pady=(10, 16))
+
     def __init__(self, owner: "ChatWindow"):
         super().__init__(owner)
         self.owner = owner
@@ -1694,6 +1714,8 @@ class SettingsDialog(tk.Toplevel):
         tabs.add(theme_tab, text="Theme")
         self.theme_frame = theme_tab
         tabs.add(card, text="Profile card")
+        alerts = ttk.Frame(tabs)
+        tabs.add(alerts, text="Alerts")
         tabs.add(account, text="Account")
         security = ttk.Frame(tabs)
         tabs.add(security, text="Security")
@@ -1703,6 +1725,7 @@ class SettingsDialog(tk.Toplevel):
         self.card_frame = card
         self._build_card_tab(card)
         self._build_theme_tab(theme_tab)
+        self._build_alerts_tab(alerts)
 
         # ---- profile picture ---------------------------------------------
         ttk.Label(profile, text="Your profile picture").pack(pady=(16, 6))
@@ -2190,6 +2213,9 @@ class ChatWindow(tk.Toplevel):
         self.port = port
 
         self.title(f"Chat Room — {username}")
+        self._base_title = f"Chat Room — {username}"
+        self.notify_prefs = notifier.Prefs()             # pop-up / flash / sound switches (Settings > Alerts)
+        self._alert_count = 0                            # alerts that arrived while you were away
         self.geometry("1000x700")
         self.minsize(720, 480)
 
@@ -2676,6 +2702,36 @@ class ChatWindow(tk.Toplevel):
         if target is not None:
             self._clear_unread(target)
 
+    def bell(self, displayof=0):
+        """The beep, unless the person switched sounds off in Settings > Alerts."""
+        if self.notify_prefs.get("sound"):
+            super().bell()
+
+    def _window_active(self) -> bool:
+        """True when this app is in front: not minimized and has the keyboard focus."""
+        try:
+            return self.state() != "iconic" and self.focus_displayof() is not None
+        except tk.TclError:
+            return False
+
+    def alert(self, title: str, body: str = "", sound: bool = True):
+        """Tell someone who has the app open but isn't looking at it: title count, taskbar flash, pop-up,
+        sound. Does nothing while the window is in front or the status is Do Not Disturb."""
+        if self.my_status == "dnd" or self._window_active():
+            return
+        self._alert_count += 1
+        try:
+            self.title(f"({self._alert_count}) {self._base_title}")
+        except tk.TclError:
+            return
+        prefs = self.notify_prefs
+        if prefs.get("flash"):
+            notifier.flash_taskbar(self)
+        if prefs.get("toast"):
+            notifier.show_toast(title, body if prefs.get("preview") else "New message")
+        if sound:
+            self.bell()
+
     def is_viewing(self, target) -> bool:
         """True only if the person can actually SEE this conversation right now:
         window not minimized, window has keyboard focus, and its tab is selected."""
@@ -2691,6 +2747,9 @@ class ChatWindow(tk.Toplevel):
 
     def _on_focus_in(self, event=None):
         """Coming back to the window: whatever tab is showing is now being read."""
+        if self._alert_count:
+            self._alert_count = 0
+            self.title(self._base_title)
         current = self.notebook.select()
         for pane in self.panes.values():
             if str(pane) == current:
@@ -2799,6 +2858,7 @@ class ChatWindow(tk.Toplevel):
                     f"Their chats are open in the tabs above.")
                 if self.my_status != "dnd":
                     self.bell()
+                self.alert(f"{total} new message{'s' if total != 1 else ''}", f"From {who}", sound=False)
             self._refresh_presence_list()
             return
 
@@ -2900,6 +2960,7 @@ class ChatWindow(tk.Toplevel):
             GameInviteDialog(self, msg)
             if self.my_status != "dnd":
                 self.bell()
+            self.alert(sender, f"invited you to play {games.GAME_NAMES.get(msg.get('game'), 'a game')}", sound=False)
             return
 
         if kind == proto.GAME_STATE:
@@ -2940,8 +3001,13 @@ class ChatWindow(tk.Toplevel):
                 self.request_translation(pane, record)
             mentioned = bool(record and msg["sender"] != self.username and not record.get("deleted")
                              and mentions_user(record["text"], self.username))
+            if (record and target is not None and msg["sender"] != self.username
+                    and not record.get("deleted") and not self.is_viewing(msg["sender"])):
+                self.alert(msg["sender"], record["text"])         # a private message while you're away
             if mentioned and not self.is_viewing(pane.target) and self.my_status != "dnd":
                 self.bell()                                       # someone @'d you while you weren't looking
+                if target is None:
+                    self.alert(f"{msg['sender']} mentioned you", record["text"], sound=False)
             self._flag_tab_activity(None if target is None else
                                      (target if msg["sender"] == self.username else msg["sender"]),
                                     mention=mentioned)
@@ -3189,6 +3255,7 @@ class ChatWindow(tk.Toplevel):
                 PaymentPrompt(self, req)
                 if event == "new" and self.my_status != "dnd":
                     self.bell()
+                    self.alert("Payment request", f"{other} is asking for {amount}", sound=False)
         elif status != "pending":
             prompt = self.pay_prompts.get(req["id"])
             if prompt is not None:
