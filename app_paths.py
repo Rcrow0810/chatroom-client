@@ -50,3 +50,25 @@ def find_resource(name: str) -> str:
         if os.path.exists(candidate):
             return candidate
     return name
+
+
+def set_app_icon(root) -> None:
+    """Give every window the chat-bubble icon (title bar corner + taskbar). Never raises: no icon is fine."""
+    try:
+        if sys.platform.startswith("win"):
+            try:                                   # so the taskbar shows OUR icon, not Python's
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ChatClient.App")
+            except Exception:
+                pass
+            ico = find_resource("icon.ico")
+            if os.path.exists(ico):
+                root.iconbitmap(default=ico)
+                return
+        png = find_resource("icon.png")
+        if os.path.exists(png):
+            import tkinter as tk
+            root._app_icon = tk.PhotoImage(file=png)      # keep a reference or Tk drops it
+            root.iconphoto(True, root._app_icon)           # True = also for every window opened later
+    except Exception:
+        pass

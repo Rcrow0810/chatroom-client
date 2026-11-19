@@ -13,6 +13,7 @@ import re
 import tkinter as tk
 
 import account_api
+import app_paths
 import ui_kit as ui
 from chat_window import ChatWindow
 from mfa_client import LoginCancelled, LoginError, login as login_with_mfa
@@ -33,6 +34,7 @@ FIELD_W = CARD_W - 2 * INSET
 class LoginApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        app_paths.set_app_icon(self)
         self.title("Chat Room")
         self.resizable(False, False)
         self.configure(bg=ui.INDIGO)

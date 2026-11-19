@@ -20,6 +20,9 @@ pyinstaller --noconfirm --clean --windowed --name ChatClient \
   --collect-submodules qrcode \
   --add-data "chat.key:." \
   --add-data "server.crt:." \
+  --add-data "icon.png:." \
+  --add-data "icon.ico:." \
+  --icon icon.ico \
   login_app.py
 
 echo
