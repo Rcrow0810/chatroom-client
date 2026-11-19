@@ -1,0 +1,17 @@
+# secrets / keys
+*.key
+*.env
+!*.env.example
+server.crt
+config.py
+# databases and user data
+*.db
+downloads/
+theme_prefs.json
+language_prefs.json
+# python / build
+__pycache__/
+*.pyc
+build/
+dist/
+.venv/
